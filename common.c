@@ -78,3 +78,63 @@ char * get_log_file_path() {
 	return g_log_file_path;
 }
 
+BOOL RestoreHook
+(	CHAR *OrgBytes
+,	CHAR *dest_address
+)
+{
+	DWORD oldProtect;
+
+	VirtualProtect(dest_address, NUM_BYTES, PAGE_EXECUTE_READWRITE, &oldProtect);
+	memcpy(dest_address, OrgBytes, NUM_BYTES);
+	VirtualProtect(dest_address, NUM_BYTES, oldProtect, &oldProtect);
+
+	return TRUE;
+}
+
+void file_dump_hex(const void* data, size_t size) {
+	size_t i;
+	for (i = 0; i < size; ++i)
+		file_log("%02X ", ((unsigned char*)data)[i]);
+	file_log("\n");
+}
+
+
+void hook_on
+(	char *lp_original_opcodes
+,	CHAR *orig_address
+,	unsigned long long lp_to_new_function
+){
+	DWORD	oldProtect
+	;
+	CHAR * new_opcodes = "\x49\xbb\x88\x77\x66\x55\x44\x33\x22\x11" // 10 bytes
+	"\x41\xff\xe3" // 3 bytes
+	;
+
+// save the original opcodes for later restore
+	if(0==*lp_original_opcodes) {
+		file_log("%s:%d A01\n", __FILE__, __LINE__);
+		memcpy(lp_original_opcodes, orig_address, 20);
+	}
+
+// the beginning of the function will be overwritten with this:
+// 49bb1122334455667788	mov r11,8877665544332211h
+// 41ffe3		jmp     r11
+// where the address 8877665544332211 is going to be changed to the alternate function
+	BYTE * p_where_to_write=(BYTE *)(new_opcodes) // points at first byte
+	,	opcode
+	;
+	p_where_to_write++; // points at second byte
+	p_where_to_write++; // points at third byte, the beninning of the far address to jump to
+	for(int idx=0; idx<8; idx++) {
+		opcode=lp_to_new_function & 0xFF;
+		*p_where_to_write++=opcode;
+		lp_to_new_function=lp_to_new_function >> 8;
+	}
+	VirtualProtect(orig_address, NUM_BYTES, PAGE_EXECUTE_READWRITE, &oldProtect);
+	memcpy(orig_address, new_opcodes, NUM_BYTES);
+	VirtualProtect(orig_address, NUM_BYTES, oldProtect, &oldProtect);
+//from this moment on, every call to orig_address will be diverted to lp_to_new_function
+}
+
+
