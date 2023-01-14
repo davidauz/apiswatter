@@ -14,12 +14,10 @@ BOOL WINAPI DllMain
 	if( DLL_PROCESS_ATTACH == fdwReason ) { 
 // Initialize once for each new process.
 
-		set_wpm_orig_bytes( 
-			hook_on
-			(	get_wpm_orig_bytes()
-			,	(LPVOID)GetProcAddress(GetModuleHandle("KERNELBASE"), "WriteProcessMemory");
-			,	new_WriteProcessMemory
-			)
+		hook_on
+		(	get_wpm_buffer_for_orig_bytes()
+		,	(LPVOID)GetProcAddress(GetModuleHandle("KERNELBASE"), "WriteProcessMemory")
+		,	new_WriteProcessMemory
 		);
 	}
 	return TRUE;  // Successful DLL_PROCESS_ATTACH

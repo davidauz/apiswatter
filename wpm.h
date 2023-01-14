@@ -17,9 +17,9 @@ BOOL new_WriteProcessMemory
 ,	SIZE_T *lpNumberOfBytesWritten
 );
 
-CHAR *get_wpm_orig_bytes();
+CHAR *get_wpm_buffer_for_orig_bytes();
 
-set_wpm_orig_bytes(CHAR *);
+void set_wpm_orig_bytes(CHAR *);
 
 #endif
 

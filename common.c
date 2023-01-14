@@ -101,9 +101,9 @@ void file_dump_hex(const void* data, size_t size) {
 
 
 void hook_on
-(	char *lp_original_opcodes
+(	char *buffer_for_original_opcodes
 ,	CHAR *orig_address
-,	unsigned long long lp_to_new_function
+,	LPVOID lp_to_new_function
 ){
 	DWORD	oldProtect
 	;
@@ -112,24 +112,23 @@ void hook_on
 	;
 
 // save the original opcodes for later restore
-	if(0==*lp_original_opcodes) {
-		file_log("%s:%d A01\n", __FILE__, __LINE__);
-		memcpy(lp_original_opcodes, orig_address, 20);
-	}
+	if(0==*buffer_for_original_opcodes)
+		memcpy(buffer_for_original_opcodes, orig_address, 20);
 
 // the beginning of the function will be overwritten with this:
 // 49bb1122334455667788	mov r11,8877665544332211h
 // 41ffe3		jmp     r11
 // where the address 8877665544332211 is going to be changed to the alternate function
-	BYTE * p_where_to_write=(BYTE *)(new_opcodes) // points at first byte
+	BYTE *p_where_to_write=(BYTE *)(new_opcodes) // points at first byte
 	,	opcode
 	;
 	p_where_to_write++; // points at second byte
-	p_where_to_write++; // points at third byte, the beninning of the far address to jump to
+	p_where_to_write++; // points at third byte: the beninning of the far address to jump to
+	unsigned long long address = (unsigned long long) lp_to_new_function;
 	for(int idx=0; idx<8; idx++) {
-		opcode=lp_to_new_function & 0xFF;
+		opcode=address & 0xFF;
 		*p_where_to_write++=opcode;
-		lp_to_new_function=lp_to_new_function >> 8;
+		address=address >> 8;
 	}
 	VirtualProtect(orig_address, NUM_BYTES, PAGE_EXECUTE_READWRITE, &oldProtect);
 	memcpy(orig_address, new_opcodes, NUM_BYTES);

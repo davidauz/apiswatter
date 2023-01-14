@@ -5,11 +5,6 @@
 #define NUM_BYTES 13 // to divert flow need 13 bytes
 
 
-typedef struct new_opcodes_s{
-	char *new_opcodes;
-	int n_size;
-};
-
 int file_log(char* format, ...);
 void set_log_fp(char *);
 int delete_log_file();
@@ -18,9 +13,8 @@ char * get_log_file_path();
 
 
 void hook_on
-(	char *lp_original_opcodes
+(	CHAR *buffer_for_original_opcodes
 ,	CHAR *orig_address
-,	CHAR *new_opcodes
 ,	LPVOID lp_to_new_function
 );
 
