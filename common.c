@@ -3,7 +3,7 @@
 #include <shlwapi.h>
 #include "common.h"
 
-__declspec(dllexport) char g_log_file_path[100]={0};
+__declspec(dllexport) char g_log_file_path[100]={"BADCAFFE"};
 
 int file_log(char* format, ...){
 	char buf[255]
@@ -44,12 +44,19 @@ void set_log_fp(char *fp){
 
 int delete_log_file() {
 	if( ! PathFileExistsA (g_log_file_path)) 
-		show_error_exit( "%s:%d warning: file `%s` not found", __FILE__, __LINE__, g_log_file_path);
+		return show_error_exit( "%s:%d warning: file `%s` not found\n", __FILE__, __LINE__, g_log_file_path);
 	else if(0==DeleteFileA(g_log_file_path))
-		return show_error_exit( "%s:%d Cannot delete file `%s`", __FILE__, __LINE__, g_log_file_path);
+		return show_error_exit( "%s:%d Cannot delete file `%s`\n", __FILE__, __LINE__, g_log_file_path);
 	return 0;
 }
 
+
+void printout(char* format, ...){
+	va_list argptr;
+	va_start(argptr, format);
+	vfprintf(stderr, format, argptr);
+	va_end(argptr);
+}
 
 int show_error_exit(char* format, ...){
 	va_list argptr;
@@ -105,9 +112,10 @@ void hook_on
 ,	CHAR *orig_address
 ,	LPVOID lp_to_new_function
 ){
+file_log("%s:%d orig:`%.16llX` new:`%.16llX` \n", __FILE__, __LINE__, orig_address, lp_to_new_function );
 	DWORD	oldProtect
 	;
-	CHAR * new_opcodes = "\x49\xbb\x88\x77\x66\x55\x44\x33\x22\x11" // 10 bytes
+	CHAR new_opcodes[]  = "\x49\xbb\x88\x77\x66\x55\x44\x33\x22\x11" // 10 bytes
 	"\x41\xff\xe3" // 3 bytes
 	;
 

@@ -30,15 +30,19 @@ BOOL new_WriteProcessMemory
 {
 	file_log("%s:%d writing at `0x%.16llX` size is `%d`\n", __FILE__, __LINE__, lpBaseAddress, nSize);
 	file_dump_hex(lpBuffer, nSize);
+file_log("%s:%d A01\n", __FILE__, __LINE__);
 
 	if(0==original_address)
 		original_address=(LPVOID)GetProcAddress(GetModuleHandle("KERNELBASE"), "WriteProcessMemory");
+file_log("%s:%d A02\n", __FILE__, __LINE__);
 
 // restore the original function
 	RestoreHook(g_wpm_orig_bytes, g_wpm_address);
+file_log("%s:%d A03\n", __FILE__, __LINE__);
 
 // call the original function
 	BOOL bRet = WriteProcessMemory(hProcess, lpBaseAddress, lpBuffer, nSize, lpNumberOfBytesWritten);
+file_log("%s:%d A04\n", __FILE__, __LINE__);
 
 // place the hook back again
 	hook_on
@@ -46,6 +50,7 @@ BOOL new_WriteProcessMemory
 	,	original_address
 	,	new_WriteProcessMemory
 	);
+file_log("%s:%d A05\n", __FILE__, __LINE__);
 }
 
 

@@ -9,6 +9,60 @@
 char g_dll_file_name[MAX_PATH]
 ;
 
+unsigned long long find_target_dll_base_address
+(	int target_pid
+,	char *target_module_name
+){
+// find the library that was loaded in the target PID
+	HANDLE moduleSnapshotHandle_ = INVALID_HANDLE_VALUE;
+	MODULEENTRY32 moduleEntry_;
+	HANDLE hProcess = OpenProcess
+	(	STANDARD_RIGHTS_REQUIRED | PROCESS_VM_OPERATION | PROCESS_VM_READ | PROCESS_VM_WRITE
+	,	FALSE
+	,	target_pid
+	);
+// standard procedure: take a snapshot of all the modules in the process
+	moduleSnapshotHandle_ = CreateToolhelp32Snapshot( TH32CS_SNAPMODULE, target_pid );
+	if( moduleSnapshotHandle_ == INVALID_HANDLE_VALUE )
+		return show_error_exit( "%s:%d Module Snapshot error for PID `%d`\n", __FILE__, __LINE__, target_pid )?0:0;
+	moduleEntry_.dwSize = sizeof( MODULEENTRY32 );
+	if( !Module32First( moduleSnapshotHandle_, &moduleEntry_ ) ) {
+		CloseHandle( moduleSnapshotHandle_ );    
+		show_error_exit("%s:%d Error in Module32First\n", __FILE__, __LINE__ );
+		return 0;
+	}
+// walk the list and find our one
+	do {
+		if( strstr(moduleEntry_.szModule, target_module_name) ) {
+// found the base address of the injected dll
+			CloseHandle(hProcess);
+			return (unsigned long long)moduleEntry_.modBaseAddr;
+		}
+	} while( Module32Next( moduleSnapshotHandle_, &moduleEntry_ ) );
+	CloseHandle(hProcess);
+	return show_error_exit( "%s:%d Cound not find target module `%s`\n", __FILE__, __LINE__, target_module_name)?0:0;
+}
+
+unsigned int  find_parameter_offset( char * target_dll ){
+// load the DLL in our process space
+	HINSTANCE hDLL=LoadLibrary(target_dll);
+	if(NULL==hDLL)
+		show_error_exit( "%s:%d error in LoadLibrary\n", __FILE__, __LINE__ );
+// LoadLibrary kindly gave us the DLL base address
+	uintptr_t our_dll_base_address = (uintptr_t)hDLL;
+// get the absolute address of the parameter
+	BYTE *target_address_in_our_dll = (BYTE *)GetProcAddress(hDLL, "g_log_file_path");
+	if (!target_address_in_our_dll) {
+		FreeLibrary(hDLL);
+		show_error_exit( "%s:%d error in GetProcAddress\n", __FILE__, __LINE__ );
+		return 0;
+	}
+	unsigned long long target_address_offset=(unsigned long long)target_address_in_our_dll-our_dll_base_address;
+// don't need it anymore
+	FreeLibrary(hDLL);
+	return target_address_offset;
+}
+
 int perform_dll_injection
 (	int target_pid
 ,	char *dll_name
@@ -19,8 +73,10 @@ int perform_dll_injection
 	BOOL	b_res;
 	MODULEINFO	modinfo
 	;
+	LPVOID dll_file_path_buffer=NULL
+	;
 
-	file_log("%s:%d dll_name=`%s`\n", __FILE__, __LINE__, dll_name);
+	printout("%s:%d dll_name=`%s`\n", __FILE__, __LINE__, dll_name);
 	if(0 == GetFullPathNameA
 	(	dll_name // [in]  LPCSTR lpFileName,
 	,	MAX_PATH // [in]  DWORD  nBufferLength,
@@ -29,24 +85,27 @@ int perform_dll_injection
 	))
 		return file_log("%s:%d Error in GetFullPathNameA\n", __FILE__, __LINE__)?FALSE:FALSE;
 	int	n_path_size=1+strlen(dll_path);
-	file_log("%s:%d DLL full path is `%s`\n", __FILE__, __LINE__, dll_path);
 	HANDLE hProcess = OpenProcess
-	(	STANDARD_RIGHTS_REQUIRED | PROCESS_VM_OPERATION | PROCESS_VM_READ | PROCESS_VM_WRITE
+	(	PROCESS_QUERY_INFORMATION | PROCESS_VM_OPERATION | PROCESS_VM_READ | PROCESS_VM_WRITE
 	,	FALSE
 	,	target_pid
 	);
 	if(NULL==hProcess)
-		return file_log("%s:%d Error in OpenProcess\n", __FILE__, __LINE__)?FALSE:FALSE;
-	LPVOID p_dll_file_path= VirtualAllocEx
+		return show_error_exit("%s:%d Error in OpenProcess\n", __FILE__, __LINE__)?FALSE:FALSE;
+	printout("%s:%d DLL=`%s`(%d), HANDLE for PID`%d`=`%d`\n", __FILE__, __LINE__, dll_path, n_path_size, target_pid, hProcess);
+	dll_file_path_buffer= VirtualAllocEx
 	(	hProcess // [in]           HANDLE hProcess,
 	,	NULL // [in, optional] LPVOID lpAddress,
 	,	n_path_size // [in]           SIZE_T dwSize,
 	,	MEM_COMMIT|MEM_RESERVE // [in]           DWORD  flAllocationType,
 	,	PAGE_READWRITE // [in]           DWORD  flProtect
 	);
+	if(NULL==dll_file_path_buffer)
+		return show_error_exit("%s:%d Error in VirtualAllocEx\n", __FILE__, __LINE__)?FALSE:FALSE;
+printout("%s:%d where_to_write=`0x%.16llX`\n", __FILE__, __LINE__, dll_file_path_buffer);
 	b_res = WriteProcessMemory
 	(	hProcess //  [in]  HANDLE  hProcess
-	,	p_dll_file_path // [in]  LPVOID  lpBaseAddress
+	,	dll_file_path_buffer // [in]  LPVOID  lpBaseAddress
 	,	dll_path // [in]  LPCVOID lpBuffer
 	,	n_path_size //[in]  SIZE_T  nSize
 	,	&NumberOfBytesWritten // [out] SIZE_T *lpNumberOfBytesWritten
@@ -59,17 +118,17 @@ int perform_dll_injection
 		CloseHandle(hProcess);
 		return file_log("%s:%d Size mismatch reading memory\n", __FILE__, __LINE__)?FALSE:FALSE;
 	}
-	file_log("%s:%d: Creating thread\n", __FILE__, __LINE__);
+	printout("%s:%d: Creating thread\n", __FILE__, __LINE__);
 	HANDLE dll_thread_handle = CreateRemoteThread
 	(	 hProcess // [in]  HANDLE                 hProcess,
 	,	 NULL // [in]  LPSECURITY_ATTRIBUTES  lpThreadAttributes,
 	,	 (SIZE_T)NULL // [in]  SIZE_T                 dwStackSize,
 	,	 (LPTHREAD_START_ROUTINE)LoadLibraryA// [in]  LPTHREAD_START_ROUTINE lpStartAddress,
-	,	 p_dll_file_path // [in]  LPVOID                 lpParameter,
+	,	 dll_file_path_buffer // [in]  LPVOID                 lpParameter,
 	,	 (DWORD)0 // [in]  DWORD                  dwCreationFlags,
 	,	 NULL // [out] LPDWORD                lpThreadId
 	);
-	file_log("%s:%d: DLL thread handle=`%d`\n", __FILE__, __LINE__, dll_thread_handle);
+	printout("%s:%d: DLL thread handle=`%d`\n", __FILE__, __LINE__, dll_thread_handle);
 	WaitForSingleObject(dll_thread_handle, INFINITE);
 
 	CloseHandle(dll_thread_handle);
@@ -81,98 +140,47 @@ int perform_dll_injection
 	);
 
 	CloseHandle(hProcess);
-	file_log("%s:%d: DLL injection successful\n", __FILE__, __LINE__);
+	printout("%s:%d: DLL injection successful\n", __FILE__, __LINE__);
 
 	return 0;
 }
 
 int fix_parameter
-(	HANDLE hProcess
-,	unsigned long long offset
-,	BYTE *module_base_address
+(	int target_pid
+,	BYTE *target_address
+,	char *log_file_path
 ){
 	DWORD	oldProtect
-	,	oldOldProtect
 	;
-	char	*file_path
-	;
-	int	file_path_length
+	int	file_path_length=1+strlen(log_file_path)
 	;
 	BOOL	b_res
 	;
 	SIZE_T	NumberOfBytesWritten
 	;
 
-	file_path=get_log_file_path();
-	file_path_length=1+strlen(file_path);
-	module_base_address+=offset;
-// instead of "passing" the parameter, carve it in the dll's live flesh
-	VirtualProtect(module_base_address, file_path_length, PAGE_EXECUTE_READWRITE, &oldProtect);
-	b_res = WriteProcessMemory
-	(	hProcess //  [in]  HANDLE  hProcess
-	,	module_base_address // [in]  LPVOID  lpBaseAddress
-	,	file_path // [in]  LPCVOID lpBuffer
-	,	file_path_length //[in]  SIZE_T  nSize
-	,	&NumberOfBytesWritten // [out] SIZE_T *lpNumberOfBytesWritten
-	);
-	if(NumberOfBytesWritten!=file_path_length)
-		file_log("%s:%d: `%d`!=`%d`\n" ,__FILE__, __LINE__ , NumberOfBytesWritten, file_path_length);
-	VirtualProtect(module_base_address, file_path_length, oldProtect, &oldProtect);
-}
-
-
-int set_parameter
-(	DWORD target_pid
-,	char *target_filename
-)
-{
-// first load the DLL in our process space
-	HINSTANCE hDLL=LoadLibrary(target_filename);
-// LoadLibrary kindly gave us the base address
-	uintptr_t dll_base_address = (uintptr_t)hDLL;
-// get the absolute address of the parameter
-	BYTE *target_address_in_dll = (BYTE *)GetProcAddress(hDLL, "g_log_file_path");
-	if (!target_address_in_dll) {
-		FreeLibrary(hDLL);
-		show_error_exit( "%s:%d error in GetProcAddress\n", __FILE__, __LINE__ );
-		return 255;
-	}
-// don't need it anymore
-	FreeLibrary(hDLL);
-	unsigned long long target_address_offset=(unsigned long long)target_address_in_dll-dll_base_address;
-// check the library that was loaded in the target PID
-	HANDLE moduleSnapshotHandle_ = INVALID_HANDLE_VALUE;
-	MODULEENTRY32 moduleEntry_;
 	HANDLE hProcess = OpenProcess
 	(	STANDARD_RIGHTS_REQUIRED | PROCESS_VM_OPERATION | PROCESS_VM_READ | PROCESS_VM_WRITE
 	,	FALSE
 	,	target_pid
 	);
-// standard procedure: take a snapshot of all the modules in the process
-	moduleSnapshotHandle_ = CreateToolhelp32Snapshot( TH32CS_SNAPMODULE, target_pid );
-	if( moduleSnapshotHandle_ == INVALID_HANDLE_VALUE )
-		return show_error_exit( "%s:%d Module Snapshot error\n", __FILE__, __LINE__ ) ? 255:255;
-	moduleEntry_.dwSize = sizeof( MODULEENTRY32 );
-	if( !Module32First( moduleSnapshotHandle_, &moduleEntry_ ) ) {
-		CloseHandle( moduleSnapshotHandle_ );    
-		file_log("%s:%d Error in Module32First\n", __FILE__, __LINE__ );
-		return 255;
-	}
-// walk the list and find the one
-	do {
-		if( strstr(moduleEntry_.szModule, target_filename) ) {
-// found the base address of the injected dll
-			fix_parameter( hProcess, target_address_offset, moduleEntry_.modBaseAddr );
-			CloseHandle(hProcess);
-			return 0;
-		}
-	} while( Module32Next( moduleSnapshotHandle_, &moduleEntry_ ) );
-
-	CloseHandle(hProcess);
-
-	file_log( "%s:%d DLL base address not found\n", __FILE__, __LINE__ );
-	return 255;
+	if(0==VirtualProtect(target_address, file_path_length, PAGE_EXECUTE_READWRITE, &oldProtect))
+		return show_error_exit( "%s:%d error in VirtualProtect\n", __FILE__, __LINE__);
+	b_res = WriteProcessMemory
+	(	hProcess //  [in]  HANDLE  hProcess
+	,	target_address // [in]  LPVOID  lpBaseAddress
+	,	log_file_path // [in]  LPCVOID lpBuffer
+	,	file_path_length //[in]  SIZE_T  nSize
+	,	&NumberOfBytesWritten // [out] SIZE_T *lpNumberOfBytesWritten
+	);
+	if(NumberOfBytesWritten!=file_path_length)
+		file_log("%s:%d: `%d`!=`%d`\n" ,__FILE__, __LINE__ , NumberOfBytesWritten, file_path_length);
+	if(0==VirtualProtect(target_address, file_path_length, oldProtect, &oldProtect))
+		return show_error_exit( "%s:%d error in VirtualProtect\n", __FILE__, __LINE__);
+	return 0;
 }
+
+
 
 int Usage(){
 	return show_error_exit("%s:%d\nUsage\n\n"
@@ -240,11 +248,10 @@ int main
 	}
 
 	if(CL_OPTIONS & OPTION_DELETE_LOG_FILE)
-		if(ERROR_VALUE==delete_log_file())
-			return ERROR_VALUE;
+		delete_log_file();
 
 	GetLocalTime(&time);
-	file_log("%s:%d: system time is %d-%d-%d %d:%d:%d\n"
+	printout("%s:%d: system time is %d-%02d-%02d %02d:%02d:%02d\n"
 	,	__FILE__
 	,	__LINE__
 	,	time.wYear
@@ -254,13 +261,22 @@ int main
 	,	time.wMinute
 	,	time.wSecond
 	);
-	file_log("%s:%d: target pid:`%d`, dll:`%s`\n", __FILE__, __LINE__, pid, g_dll_file_name);
+	printout("%s:%d: target pid:`%d`, dll:`%s`\n", __FILE__, __LINE__, pid, g_dll_file_name);
 
 	perform_dll_injection(pid, g_dll_file_name);
 
+	unsigned long parameter_offset=find_parameter_offset(g_dll_file_name);
+	if(0==parameter_offset)
+		return show_error_exit( "%s:%d error getting parameter offset\n", __FILE__, __LINE__ );
+
+	unsigned long long target_dll_base_address=find_target_dll_base_address(pid, g_dll_file_name);
+	if(0==target_dll_base_address)
+		return show_error_exit( "%s:%d error getting target DLL base addr\n", __FILE__, __LINE__ );
+
 // now for the old problem of passing a parameter to an injected DLL
-	if(0 != set_parameter(pid, g_dll_file_name))
-		return show_error_exit( "%s:%d error in set_parameter\n", __FILE__, __LINE__ );
+	if(0 != fix_parameter(pid, (BYTE *)(target_dll_base_address+parameter_offset), get_log_file_path()))
+		return show_error_exit( "%s:%d error in fix_parameter\n", __FILE__, __LINE__ );
+	show_error_exit( "%s:%d log file is `%s`\n", __FILE__, __LINE__, get_log_file_path() );
 
 	return 0;
 }
