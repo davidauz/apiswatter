@@ -1,7 +1,7 @@
 CC= gcc
 CFLAGS=-g -march=x86-64
 headers = common.h wpm.h
-sources = apihook.c apiswatter.c common.c wpm.c
+sources = apihook.c apiswatter.c common.c wpm.c gpa.c
 objects=$(sources:%.c=%.o)
 all: apiswatter.exe apihook.dll
 	@echo "ALL DONE"
@@ -9,8 +9,8 @@ all: apiswatter.exe apihook.dll
 apiswatter.exe: apiswatter.o common.o $(headers)
 	$(CC) $(CFLAGS) -o apiswatter.exe apiswatter.o common.o -lShlwapi
 
-apihook.dll : apihook.o common.o wpm.o $(headers)
-	$(CC) -shared -o apihook.dll apihook.o common.o wpm.o -lShlwapi
+apihook.dll : apihook.o common.o wpm.o gpa.o $(headers)
+	$(CC) -shared -o apihook.dll apihook.o common.o wpm.o gpa.o -lShlwapi
 
 clean:
 	del *.exe

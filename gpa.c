@@ -2,15 +2,15 @@
 #include <stdbool.h>
 #include "common.h"
 
-// code specific for WriteProcessMemory
+// code specific for GetProcAddress
 
 LPVOID g_gpa_address;
-LPVOID original_address=0;
-char g_hooked_func_orig_bytes[50] = {0};
+LPVOID gpa_original_address=0;
+char g_gpa_hooked_func_orig_bytes[50] = {0};
 
 CHAR *get_gpa_buffer_for_orig_bytes()
 {
-	return g_hooked_func_orig_bytes;
+	return g_gpa_hooked_func_orig_bytes;
 }
 
 void set_gpa_orig_bytes
@@ -18,37 +18,35 @@ void set_gpa_orig_bytes
 ,	int n_size
 )
 {
-	memcpy(g_hooked_func_orig_bytes, orig_bytes, n_size);
+	memcpy(g_gpa_hooked_func_orig_bytes, orig_bytes, n_size);
 }
 
 
 
-BOOL new_WriteProcessMemory
-(	HANDLE hProcess
-,	LPVOID lpBaseAddress
-,	LPCVOID lpBuffer
-,	SIZE_T nSize
-,	SIZE_T *lpNumberOfBytesWritten
+FARPROC new_GetProcAddress
+(	HMODULE hModule
+,	LPCSTR  lpProcName
 )
 {
-	file_log("%s:%d writing at `0x%.16llX` size is `%d`\n", __FILE__, __LINE__, lpBaseAddress, nSize);
-	file_dump_hex(lpBuffer, nSize);
+	file_log("%s:%d getting address of `%s`\n", __FILE__, __LINE__, lpProcName);
 
-	if(0==original_address)
-		original_address=(LPVOID)GetProcAddress(GetModuleHandle("KERNELBASE"), "WriteProcessMemory");
+	if(0==gpa_original_address)
+		gpa_original_address=(LPVOID)GetProcAddress(GetModuleHandle("KERNELBASE"), "GetProcAddress");
 
 // restore the original function
-	RestoreHook(g_hooked_func_orig_bytes, original_address);
+	RestoreHook(g_gpa_hooked_func_orig_bytes, gpa_original_address);
 
 // call the original function
-	BOOL bRet = WriteProcessMemory(hProcess, lpBaseAddress, lpBuffer, nSize, lpNumberOfBytesWritten);
+	FARPROC return_value = GetProcAddress(hModule, lpProcName);
 
 // place the hook back again
 	hook_on
-	(	g_hooked_func_orig_bytes
-	,	original_address
-	,	new_WriteProcessMemory
+	(	g_gpa_hooked_func_orig_bytes
+	,	gpa_original_address
+	,	new_GetProcAddress
 	);
+
+	return return_value;
 }
 
 

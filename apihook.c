@@ -12,7 +12,7 @@ BOOL WINAPI DllMain
 ,	LPVOID lpvReserved // reserved
 )
 {
-	set_log_fp("");
+	set_log_fp("d:\\devel\\log2.txt");
 	if( DLL_PROCESS_ATTACH == fdwReason ) {
 		hook_on
 		(	get_wpm_buffer_for_orig_bytes()

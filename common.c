@@ -119,6 +119,7 @@ void hook_on
 	CHAR new_opcodes[]  = "\x49\xbb\x88\x77\x66\x55\x44\x33\x22\x11" // 10 bytes
 	"\x41\xff\xe3" // 3 bytes
 	;
+file_log("%s:%d buffer`0x%.16llX`, address`0x%.16llX`\n", __FILE__, __LINE__, buffer_for_original_opcodes, orig_address);
 
 // save the original opcodes for later restore
 	if(0==*buffer_for_original_opcodes)
@@ -142,6 +143,7 @@ void hook_on
 	VirtualProtect(orig_address, NUM_BYTES, PAGE_EXECUTE_READWRITE, &oldProtect);
 	memcpy(orig_address, new_opcodes, NUM_BYTES);
 	VirtualProtect(orig_address, NUM_BYTES, oldProtect, &oldProtect);
+file_log("%s:%d hook_on SUCCESS\n", __FILE__, __LINE__);
 //from this moment on, every call to orig_address will be diverted to lp_to_new_function
 }
 
