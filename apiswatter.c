@@ -47,7 +47,7 @@ unsigned long long find_target_dll_base_address
 
 unsigned int  find_parameter_offset( char * target_dll ){
 // load the DLL in our process space
-	HINSTANCE hDLL=LoadLibrary(target_dll);
+	HINSTANCE hDLL=LoadLibrary(target_dll); // not calling FreeLibrary afterwards because weird error
 	if(NULL==hDLL)
 		show_error_exit( "%s:%d error in LoadLibrary\n", __FILE__, __LINE__ );
 // LoadLibrary kindly gave us the DLL base address
@@ -56,12 +56,10 @@ unsigned int  find_parameter_offset( char * target_dll ){
 	BYTE *target_address_in_our_dll = (BYTE *)GetProcAddress(hDLL, "g_log_file_path");
 	if (!target_address_in_our_dll) {
 		FreeLibrary(hDLL);
-		show_error_exit( "%s:%d error in GetProcAddress\n", __FILE__, __LINE__ );
+		printout( "%s:%d error in GetProcAddress\n", __FILE__, __LINE__ );
 		return 0;
 	}
 	unsigned long long target_address_offset=(unsigned long long)target_address_in_our_dll-our_dll_base_address;
-// don't need it anymore
-	FreeLibrary(hDLL);
 	return target_address_offset;
 }
 
@@ -69,7 +67,7 @@ int perform_dll_injection
 (	int target_pid
 ,	char *dll_name
 ) {
-	char	dll_path[MAX_PATH]={0}
+	char	dll_file_full_path[MAX_PATH]={0}
 	;
 	SIZE_T  NumberOfBytesWritten;
 	BOOL	b_res;
@@ -77,15 +75,17 @@ int perform_dll_injection
 	;
 	LPVOID dll_file_path_buffer=NULL
 	;
+	DWORD injected_dll_handle = 0
+	;
 
 	if(0 == GetFullPathNameA
 	(	dll_name // [in]  LPCSTR lpFileName,
 	,	MAX_PATH // [in]  DWORD  nBufferLength,
-	,	dll_path // [out] LPSTR  lpBuffer,
+	,	dll_file_full_path // [out] LPSTR  lpBuffer,
 	,	NULL // [out] LPSTR  *lpFilePart
 	))
 		return file_log("%s:%d Error in GetFullPathNameA\n", __FILE__, __LINE__)?FALSE:FALSE;
-	int	n_path_size=1+strlen(dll_path);
+	int	n_path_size=1+strlen(dll_file_full_path);
 	HANDLE hProcess = OpenProcess
 	(	PROCESS_QUERY_INFORMATION | PROCESS_VM_OPERATION | PROCESS_VM_READ | PROCESS_VM_WRITE
 	,	FALSE
@@ -93,7 +93,7 @@ int perform_dll_injection
 	);
 	if(NULL==hProcess)
 		return show_error_exit("%s:%d Error in OpenProcess\n", __FILE__, __LINE__)?FALSE:FALSE;
-	printout("%s:%d DLL=`%s`(%d), HANDLE for PID`%d`=`%d`\n", __FILE__, __LINE__, dll_path, n_path_size, target_pid, hProcess);
+
 	dll_file_path_buffer= VirtualAllocEx
 	(	hProcess // [in]           HANDLE hProcess,
 	,	NULL // [in, optional] LPVOID lpAddress,
@@ -106,7 +106,7 @@ int perform_dll_injection
 	b_res = WriteProcessMemory
 	(	hProcess //  [in]  HANDLE  hProcess
 	,	dll_file_path_buffer // [in]  LPVOID  lpBaseAddress
-	,	dll_path // [in]  LPCVOID lpBuffer
+	,	dll_file_full_path // [in]  LPCVOID lpBuffer
 	,	n_path_size //[in]  SIZE_T  nSize
 	,	&NumberOfBytesWritten // [out] SIZE_T *lpNumberOfBytesWritten
 	);
@@ -118,7 +118,7 @@ int perform_dll_injection
 		CloseHandle(hProcess);
 		return file_log("%s:%d Size mismatch reading memory\n", __FILE__, __LINE__)?FALSE:FALSE;
 	}
-	printout("%s:%d: Creating thread\n", __FILE__, __LINE__);
+
 	HANDLE dll_thread_handle = CreateRemoteThread
 	(	 hProcess // [in]  HANDLE                 hProcess,
 	,	 NULL // [in]  LPSECURITY_ATTRIBUTES  lpThreadAttributes,
@@ -128,19 +128,19 @@ int perform_dll_injection
 	,	 (DWORD)0 // [in]  DWORD                  dwCreationFlags,
 	,	 NULL // [out] LPDWORD                lpThreadId
 	);
-	printout("%s:%d: DLL thread handle=`%d`\n", __FILE__, __LINE__, dll_thread_handle);
+
 	WaitForSingleObject(dll_thread_handle, INFINITE);
+        GetExitCodeThread(dll_thread_handle, &injected_dll_handle);
 
 	CloseHandle(dll_thread_handle);
 	b_res=VirtualFreeEx
 	(	hProcess // [in] HANDLE hProcess,
-	,	dll_path // [in] LPVOID lpAddress,
+	,	dll_file_full_path // [in] LPVOID lpAddress,
 	,	n_path_size // [in] SIZE_T dwSize,
 	,	MEM_RELEASE // [in] DWORD  dwFreeType
 	);
 
 	CloseHandle(hProcess);
-	printout("%s:%d: DLL injection successful\n", __FILE__, __LINE__);
 
 	return 0;
 }
@@ -160,7 +160,7 @@ int fix_parameter
 	;
 
 	HANDLE hProcess = OpenProcess
-	(	STANDARD_RIGHTS_REQUIRED | PROCESS_VM_OPERATION | PROCESS_VM_READ | PROCESS_VM_WRITE
+	(	PROCESS_ALL_ACCESS // STANDARD_RIGHTS_REQUIRED | PROCESS_VM_OPERATION | PROCESS_VM_READ | PROCESS_VM_WRITE
 	,	FALSE
 	,	target_pid
 	);
@@ -168,11 +168,10 @@ int fix_parameter
 	(	hProcess
 	,	target_address
 	,	file_path_length
-	,	PAGE_READWRITE
+	,	PAGE_EXECUTE_READWRITE
 	,	&oldProtect
 	))
 		return show_error_exit( "%s:%d error in VirtualProtect\n", __FILE__, __LINE__);
-printout("%s:%d hProcess`%d` target_address`%.16llX` log_file_path`%s` file_path_length`%d`\n", __FILE__, __LINE__, hProcess, target_address, log_file_path, file_path_length);
 	b_res = WriteProcessMemory
 	(	hProcess //  [in]  HANDLE  hProcess
 	,	target_address // [in]  LPVOID  lpBaseAddress
@@ -180,7 +179,7 @@ printout("%s:%d hProcess`%d` target_address`%.16llX` log_file_path`%s` file_path
 	,	file_path_length //[in]  SIZE_T  nSize
 	,	&NumberOfBytesWritten // [out] SIZE_T *lpNumberOfBytesWritten
 	);
-printout("%s:%d \n", __FILE__, __LINE__);
+
 	if(NumberOfBytesWritten!=file_path_length)
 		file_log("%s:%d: `%d`!=`%d`\n" ,__FILE__, __LINE__ , NumberOfBytesWritten, file_path_length);
 	if(0==VirtualProtectEx
@@ -327,20 +326,22 @@ int main
 
 	perform_dll_injection(pid, g_dll_file_name);
 
+
 	unsigned long parameter_offset=find_parameter_offset(g_dll_file_name);
+
 	if(0==parameter_offset)
 		return show_error_exit( "%s:%d error getting parameter offset\n", __FILE__, __LINE__ );
 
-	unsigned long long target_dll_base_address=find_target_dll_base_address(pid, g_dll_file_name);
+
+	unsigned long long target_dll_base_address= find_target_dll_base_address(pid, g_dll_file_name);
+
 	if(0==target_dll_base_address)
 		return show_error_exit( "%s:%d error getting target DLL base addr\n", __FILE__, __LINE__ );
-printout("%s:%d target dll base address is `%.16llX`\n", __FILE__, __LINE__, target_dll_base_address);
-printout("%s:%d absolute address=`%.16llX`, log file path `%s`\n", __FILE__, __LINE__, (BYTE *)(target_dll_base_address+parameter_offset), get_log_file_path());
 
 // now for the old problem of passing a parameter to an injected DLL
 	if(0 != fix_parameter(pid, (BYTE *)(target_dll_base_address+parameter_offset), get_log_file_path()))
 		return show_error_exit( "%s:%d error in fix_parameter\n", __FILE__, __LINE__ );
-	printout( "%s:%d log file is `%s`\n", __FILE__, __LINE__, get_log_file_path() );
+	printout("%s:%d Success\n\n", __FILE__, __LINE__);
 
 	return 0;
 }

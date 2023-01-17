@@ -11,9 +11,7 @@ BOOL WINAPI DllMain
 ,	LPVOID lpvReserved // reserved
 )
 {
-	set_log_fp("d:\\devel\\log2.txt");
-//set_log_fp(""); // waiting for real value to be set
-//file_log("%s:%d\n", __FILE__, __LINE__);
+	set_log_fp("");
 	if( DLL_PROCESS_ATTACH == fdwReason ) {
 // Initialize once for each new process.
 		hook_on
