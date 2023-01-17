@@ -2,6 +2,7 @@
 #include <stdbool.h>
 #include "common.h"
 #include "wpm.h"
+#include "gpa.h"
 
 #define NUM_BYTES 13
 
@@ -17,6 +18,12 @@ BOOL WINAPI DllMain
 		(	get_wpm_buffer_for_orig_bytes()
 		,	(LPVOID)GetProcAddress(GetModuleHandle("KERNELBASE"), "WriteProcessMemory")
 		,	new_WriteProcessMemory
+		);
+
+		hook_on
+		(	get_gpa_buffer_for_orig_bytes()
+		,	(LPVOID)GetProcAddress(GetModuleHandle("KERNELBASE"), "GetProcAddress")
+		,	new_GetProcAddress
 		);
 	}
 	return TRUE;  // Successful DLL_PROCESS_ATTACH
