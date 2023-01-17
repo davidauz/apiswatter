@@ -11,16 +11,16 @@ BOOL WINAPI DllMain
 ,	LPVOID lpvReserved // reserved
 )
 {
-//	set_log_fp("d:\\devel\\log.txt");
+	set_log_fp("d:\\devel\\log2.txt");
+//set_log_fp(""); // waiting for real value to be set
+//file_log("%s:%d\n", __FILE__, __LINE__);
 	if( DLL_PROCESS_ATTACH == fdwReason ) {
-file_log("%s:%d \n", __FILE__, __LINE__ );
 // Initialize once for each new process.
 		hook_on
 		(	get_wpm_buffer_for_orig_bytes()
 		,	(LPVOID)GetProcAddress(GetModuleHandle("KERNELBASE"), "WriteProcessMemory")
 		,	new_WriteProcessMemory
 		);
-file_log("%s:%d \n", __FILE__, __LINE__ );
 	}
 	return TRUE;  // Successful DLL_PROCESS_ATTACH
 }

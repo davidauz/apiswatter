@@ -34,7 +34,7 @@ file_log("%s:%d A01\n", __FILE__, __LINE__);
 
 	if(0==original_address)
 		original_address=(LPVOID)GetProcAddress(GetModuleHandle("KERNELBASE"), "WriteProcessMemory");
-file_log("%s:%d A02\n", __FILE__, __LINE__);
+file_log("%s:%d wpm original address=`%.16llX`\n", __FILE__, __LINE__, original_address);
 
 // restore the original function
 	RestoreHook(g_wpm_orig_bytes, g_wpm_address);

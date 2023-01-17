@@ -5,6 +5,8 @@
 #include "common.h"
 
 #define OPTION_DELETE_LOG_FILE 0x01
+#define OPTION_EXE_NAME 0x02
+#define OPTION_PID 0x04
 
 char g_dll_file_name[MAX_PATH]
 ;
@@ -76,7 +78,6 @@ int perform_dll_injection
 	LPVOID dll_file_path_buffer=NULL
 	;
 
-	printout("%s:%d dll_name=`%s`\n", __FILE__, __LINE__, dll_name);
 	if(0 == GetFullPathNameA
 	(	dll_name // [in]  LPCSTR lpFileName,
 	,	MAX_PATH // [in]  DWORD  nBufferLength,
@@ -102,7 +103,6 @@ int perform_dll_injection
 	);
 	if(NULL==dll_file_path_buffer)
 		return show_error_exit("%s:%d Error in VirtualAllocEx\n", __FILE__, __LINE__)?FALSE:FALSE;
-printout("%s:%d where_to_write=`0x%.16llX`\n", __FILE__, __LINE__, dll_file_path_buffer);
 	b_res = WriteProcessMemory
 	(	hProcess //  [in]  HANDLE  hProcess
 	,	dll_file_path_buffer // [in]  LPVOID  lpBaseAddress
@@ -164,8 +164,15 @@ int fix_parameter
 	,	FALSE
 	,	target_pid
 	);
-	if(0==VirtualProtect(target_address, file_path_length, PAGE_EXECUTE_READWRITE, &oldProtect))
+	if(0==VirtualProtectEx
+	(	hProcess
+	,	target_address
+	,	file_path_length
+	,	PAGE_READWRITE
+	,	&oldProtect
+	))
 		return show_error_exit( "%s:%d error in VirtualProtect\n", __FILE__, __LINE__);
+printout("%s:%d hProcess`%d` target_address`%.16llX` log_file_path`%s` file_path_length`%d`\n", __FILE__, __LINE__, hProcess, target_address, log_file_path, file_path_length);
 	b_res = WriteProcessMemory
 	(	hProcess //  [in]  HANDLE  hProcess
 	,	target_address // [in]  LPVOID  lpBaseAddress
@@ -173,19 +180,54 @@ int fix_parameter
 	,	file_path_length //[in]  SIZE_T  nSize
 	,	&NumberOfBytesWritten // [out] SIZE_T *lpNumberOfBytesWritten
 	);
+printout("%s:%d \n", __FILE__, __LINE__);
 	if(NumberOfBytesWritten!=file_path_length)
 		file_log("%s:%d: `%d`!=`%d`\n" ,__FILE__, __LINE__ , NumberOfBytesWritten, file_path_length);
-	if(0==VirtualProtect(target_address, file_path_length, oldProtect, &oldProtect))
+	if(0==VirtualProtectEx
+	(	hProcess
+	,	target_address
+	,	file_path_length
+	,	oldProtect
+	, &oldProtect))
 		return show_error_exit( "%s:%d error in VirtualProtect\n", __FILE__, __LINE__);
 	return 0;
 }
 
+int find_process_id(char *TARGET_EXE) {
+	PROCESSENTRY32 pe32;
+	HANDLE hProcess;
+	HANDLE hProcessSnap = CreateToolhelp32Snapshot( TH32CS_SNAPPROCESS, 0 );
+	int return_pid = 0;
+	if( hProcessSnap == INVALID_HANDLE_VALUE )
+		return show_error_exit("%s:%d Error in CreateToolhelp32Snapshot", __FILE__, __LINE__)?0:0;
+
+	pe32.dwSize = sizeof( PROCESSENTRY32 );
+	if( !Process32First( hProcessSnap, &pe32 ) ) {
+		CloseHandle( hProcessSnap );
+		show_error_exit("%s:%d Error in Process32First", __FILE__, __LINE__);
+		return 0;
+	}
+
+	do{
+		hProcess = OpenProcess( PROCESS_ALL_ACCESS, FALSE, pe32.th32ProcessID );
+		if(strstr(TARGET_EXE, pe32.szExeFile)) {
+//			g_baseAddress = find_process_base_address( pe32.th32ProcessID );
+//			g_process_id =  pe32.th32ProcessID;
+			return_pid= pe32.th32ProcessID;
+			break;
+		}
+	} while( Process32Next( hProcessSnap, &pe32 ) );
+	CloseHandle(hProcess);
+
+	return return_pid;
+}
 
 
 int Usage(){
 	return show_error_exit("%s:%d\nUsage\n\n"
 "-h: this help\n"
 "-p <pid>\n"
+"-e <exe name>\n"
 "-d <dll file name> (default %s)\n"
 "-l <log file> (default %s)\n"
 "-r delete log file contents at startup\n"
@@ -207,6 +249,8 @@ int main
 	;
 	SYSTEMTIME time
 	;
+	char exe_name[MAX_PATH]
+	;
 
 	set_log_fp("log.txt"); // default log file name
 	strcpy(g_dll_file_name, "apihook.dll");
@@ -225,6 +269,13 @@ int main
 			return show_error_exit("%s:%d DLL file name max length=`%d`\n", __FILE__, __LINE__, MAX_PATH);
 		strcpy(g_dll_file_name, argv[i]);
 		i++;
+	} else if(!strcmp("-e", argv[i])){
+		CL_OPTIONS |= OPTION_EXE_NAME;
+		if(argc<=(1+i))
+			return show_error_exit("%s:%d Missing argument after option `%s`", __FILE__, __LINE__, argv[i]);
+		i++;
+		strcpy(exe_name, argv[i]);
+		i++;
 	} else if(!strcmp("-r", argv[i])){
 		CL_OPTIONS |= OPTION_DELETE_LOG_FILE;
 		i++;
@@ -237,6 +288,7 @@ int main
 		set_log_fp(argv[i]);
 		i++;
 	} else if(!strcmp("-p", argv[i])){
+		CL_OPTIONS |= OPTION_PID;
 		if(argc<=(1+i))
 			return show_error_exit("%s:%d Missing argument after option `%s`\n", __FILE__, __LINE__, argv[i]);
 		i++;
@@ -249,9 +301,19 @@ int main
 
 	if(CL_OPTIONS & OPTION_DELETE_LOG_FILE)
 		delete_log_file();
+	if(	CL_OPTIONS & OPTION_EXE_NAME
+	&&	CL_OPTIONS & OPTION_PID
+	)
+		return show_error_exit("%s:%d cannot give both PID and EXE NAME\n", __FILE__, __LINE__);
+
+	if(CL_OPTIONS & OPTION_EXE_NAME) {
+		pid=find_process_id(exe_name);
+		if(0==pid)
+			return show_error_exit("%s:%d problem getting pid for `%s`\n", __FILE__, __LINE__, exe_name);
+	}
 
 	GetLocalTime(&time);
-	printout("%s:%d: system time is %d-%02d-%02d %02d:%02d:%02d\n"
+	file_log("%s:%d: system time is %d-%02d-%02d %02d:%02d:%02d\n"
 	,	__FILE__
 	,	__LINE__
 	,	time.wYear
@@ -272,11 +334,13 @@ int main
 	unsigned long long target_dll_base_address=find_target_dll_base_address(pid, g_dll_file_name);
 	if(0==target_dll_base_address)
 		return show_error_exit( "%s:%d error getting target DLL base addr\n", __FILE__, __LINE__ );
+printout("%s:%d target dll base address is `%.16llX`\n", __FILE__, __LINE__, target_dll_base_address);
+printout("%s:%d absolute address=`%.16llX`, log file path `%s`\n", __FILE__, __LINE__, (BYTE *)(target_dll_base_address+parameter_offset), get_log_file_path());
 
 // now for the old problem of passing a parameter to an injected DLL
 	if(0 != fix_parameter(pid, (BYTE *)(target_dll_base_address+parameter_offset), get_log_file_path()))
 		return show_error_exit( "%s:%d error in fix_parameter\n", __FILE__, __LINE__ );
-	show_error_exit( "%s:%d log file is `%s`\n", __FILE__, __LINE__, get_log_file_path() );
+	printout( "%s:%d log file is `%s`\n", __FILE__, __LINE__, get_log_file_path() );
 
 	return 0;
 }

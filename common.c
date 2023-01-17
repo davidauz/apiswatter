@@ -10,6 +10,8 @@ int file_log(char* format, ...){
 	;
 	DWORD	dwBytesWritten;
 	va_list argptr;
+	if(0==strlen(g_log_file_path))
+		return 0;
 	va_start(argptr, format);
 	vsprintf(buf, format, argptr);
 	va_end(argptr);
@@ -92,9 +94,13 @@ BOOL RestoreHook
 {
 	DWORD oldProtect;
 
+file_log("%s:%d\n", __FILE__, __LINE__);
 	VirtualProtect(dest_address, NUM_BYTES, PAGE_EXECUTE_READWRITE, &oldProtect);
+file_log("%s:%d `%.16llX` `%.16llX` `%d`\n", __FILE__, __LINE__, dest_address, OrgBytes, NUM_BYTES);
 	memcpy(dest_address, OrgBytes, NUM_BYTES);
+file_log("%s:%d\n", __FILE__, __LINE__);
 	VirtualProtect(dest_address, NUM_BYTES, oldProtect, &oldProtect);
+file_log("%s:%d\n", __FILE__, __LINE__);
 
 	return TRUE;
 }
@@ -112,13 +118,14 @@ void hook_on
 ,	CHAR *orig_address
 ,	LPVOID lp_to_new_function
 ){
-file_log("%s:%d orig:`%.16llX` new:`%.16llX` \n", __FILE__, __LINE__, orig_address, lp_to_new_function );
+file_log("%s:%d HOOK ON BEGINS, orig:`%.16llX`, new:`%.16llX` \n", __FILE__, __LINE__, orig_address, lp_to_new_function );
 	DWORD	oldProtect
 	;
 	CHAR new_opcodes[]  = "\x49\xbb\x88\x77\x66\x55\x44\x33\x22\x11" // 10 bytes
 	"\x41\xff\xe3" // 3 bytes
 	;
 
+file_log("%s:%d \n", __FILE__, __LINE__ );
 // save the original opcodes for later restore
 	if(0==*buffer_for_original_opcodes)
 		memcpy(buffer_for_original_opcodes, orig_address, 20);
@@ -134,6 +141,7 @@ file_log("%s:%d orig:`%.16llX` new:`%.16llX` \n", __FILE__, __LINE__, orig_addre
 	p_where_to_write++; // points at third byte: the beninning of the far address to jump to
 	unsigned long long address = (unsigned long long) lp_to_new_function;
 	for(int idx=0; idx<8; idx++) {
+file_log("%s:%d HOOK ON `%02x`\n", __FILE__, __LINE__, opcode );
 		opcode=address & 0xFF;
 		*p_where_to_write++=opcode;
 		address=address >> 8;
@@ -141,6 +149,7 @@ file_log("%s:%d orig:`%.16llX` new:`%.16llX` \n", __FILE__, __LINE__, orig_addre
 	VirtualProtect(orig_address, NUM_BYTES, PAGE_EXECUTE_READWRITE, &oldProtect);
 	memcpy(orig_address, new_opcodes, NUM_BYTES);
 	VirtualProtect(orig_address, NUM_BYTES, oldProtect, &oldProtect);
+file_log("%s:%d HOOK ON ENDS\n", __FILE__, __LINE__ );
 //from this moment on, every call to orig_address will be diverted to lp_to_new_function
 }
 
