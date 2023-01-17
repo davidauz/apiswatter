@@ -9,7 +9,7 @@ void set_log_fp(char *);
 int delete_log_file();
 int show_error_exit(char* format, ...);
 void printout(char* format, ...);
-char * get_log_file_path();
+char *get_log_file_path();
 
 void hook_on
 (	CHAR *buffer_for_original_opcodes

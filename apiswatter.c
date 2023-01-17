@@ -45,9 +45,9 @@ unsigned long long find_target_dll_base_address
 	return show_error_exit( "%s:%d Cound not find target module `%s`\n", __FILE__, __LINE__, target_module_name)?0:0;
 }
 
-unsigned int  find_parameter_offset( char * target_dll ){
+unsigned int find_parameter_offset( char * target_dll ){
 // load the DLL in our process space
-	HINSTANCE hDLL=LoadLibrary(target_dll); // not calling FreeLibrary afterwards because weird error
+	HINSTANCE hDLL=LoadLibrary(target_dll); // not calling FreeLibrary afterwards because of weird error
 	if(NULL==hDLL)
 		show_error_exit( "%s:%d error in LoadLibrary\n", __FILE__, __LINE__ );
 // LoadLibrary kindly gave us the DLL base address
@@ -74,8 +74,6 @@ int perform_dll_injection
 	MODULEINFO	modinfo
 	;
 	LPVOID dll_file_path_buffer=NULL
-	;
-	DWORD injected_dll_handle = 0
 	;
 
 	if(0 == GetFullPathNameA
@@ -130,8 +128,6 @@ int perform_dll_injection
 	);
 
 	WaitForSingleObject(dll_thread_handle, INFINITE);
-        GetExitCodeThread(dll_thread_handle, &injected_dll_handle);
-
 	CloseHandle(dll_thread_handle);
 	b_res=VirtualFreeEx
 	(	hProcess // [in] HANDLE hProcess,
@@ -160,7 +156,7 @@ int fix_parameter
 	;
 
 	HANDLE hProcess = OpenProcess
-	(	PROCESS_ALL_ACCESS // STANDARD_RIGHTS_REQUIRED | PROCESS_VM_OPERATION | PROCESS_VM_READ | PROCESS_VM_WRITE
+	(	PROCESS_ALL_ACCESS
 	,	FALSE
 	,	target_pid
 	);
@@ -179,7 +175,6 @@ int fix_parameter
 	,	file_path_length //[in]  SIZE_T  nSize
 	,	&NumberOfBytesWritten // [out] SIZE_T *lpNumberOfBytesWritten
 	);
-
 	if(NumberOfBytesWritten!=file_path_length)
 		file_log("%s:%d: `%d`!=`%d`\n" ,__FILE__, __LINE__ , NumberOfBytesWritten, file_path_length);
 	if(0==VirtualProtectEx
@@ -196,7 +191,7 @@ int find_process_id(char *TARGET_EXE) {
 	PROCESSENTRY32 pe32;
 	HANDLE hProcess;
 	HANDLE hProcessSnap = CreateToolhelp32Snapshot( TH32CS_SNAPPROCESS, 0 );
-	int return_pid = 0;
+	int result_pid = 0;
 	if( hProcessSnap == INVALID_HANDLE_VALUE )
 		return show_error_exit("%s:%d Error in CreateToolhelp32Snapshot", __FILE__, __LINE__)?0:0;
 
@@ -210,23 +205,21 @@ int find_process_id(char *TARGET_EXE) {
 	do{
 		hProcess = OpenProcess( PROCESS_ALL_ACCESS, FALSE, pe32.th32ProcessID );
 		if(strstr(TARGET_EXE, pe32.szExeFile)) {
-//			g_baseAddress = find_process_base_address( pe32.th32ProcessID );
-//			g_process_id =  pe32.th32ProcessID;
-			return_pid= pe32.th32ProcessID;
+			result_pid= pe32.th32ProcessID;
 			break;
 		}
 	} while( Process32Next( hProcessSnap, &pe32 ) );
 	CloseHandle(hProcess);
 
-	return return_pid;
+	return result_pid;
 }
 
 
 int Usage(){
 	return show_error_exit("%s:%d\nUsage\n\n"
 "-h: this help\n"
-"-p <pid>\n"
-"-e <exe name>\n"
+"-p <target pid>\n"
+"-e <target exe name>\n"
 "-d <dll file name> (default %s)\n"
 "-l <log file> (default %s)\n"
 "-r delete log file contents at startup\n"
@@ -326,12 +319,10 @@ int main
 
 	perform_dll_injection(pid, g_dll_file_name);
 
-
 	unsigned long parameter_offset=find_parameter_offset(g_dll_file_name);
 
 	if(0==parameter_offset)
 		return show_error_exit( "%s:%d error getting parameter offset\n", __FILE__, __LINE__ );
-
 
 	unsigned long long target_dll_base_address= find_target_dll_base_address(pid, g_dll_file_name);
 

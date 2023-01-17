@@ -3,7 +3,7 @@
 #include <shlwapi.h>
 #include "common.h"
 
-__declspec(dllexport) char g_log_file_path[100]={"BADCAFFE"};
+__declspec(dllexport) char g_log_file_path[100]={0};
 
 int file_log(char* format, ...){
 	char buf[255]

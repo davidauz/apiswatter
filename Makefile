@@ -1,6 +1,6 @@
 CC= gcc
 CFLAGS=-g -march=x86-64
-headers = 
+headers = common.h wpm.h
 sources = apihook.c apiswatter.c common.c wpm.c
 objects=$(sources:%.c=%.o)
 all: apiswatter.exe apihook.dll

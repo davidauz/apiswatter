@@ -13,7 +13,6 @@ BOOL WINAPI DllMain
 {
 	set_log_fp("");
 	if( DLL_PROCESS_ATTACH == fdwReason ) {
-// Initialize once for each new process.
 		hook_on
 		(	get_wpm_buffer_for_orig_bytes()
 		,	(LPVOID)GetProcAddress(GetModuleHandle("KERNELBASE"), "WriteProcessMemory")
