@@ -1,5 +1,5 @@
-#ifndef _WPM_H_
-#define _WPM_H_
+#ifndef _GPA_H_
+#define _GPA_H_
 
 typedef FARPROC (WINAPI *GetProcAddress_)
 (	HMODULE hModule
