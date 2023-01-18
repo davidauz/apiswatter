@@ -19,6 +19,8 @@ BOOL new_WriteProcessMemory
 
 CHAR *get_wpm_buffer_for_orig_bytes();
 
+LPVOID get_wpm_pointer_to_original_address();
+
 void set_wpm_orig_bytes(CHAR *);
 
 #endif

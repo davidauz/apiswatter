@@ -29,7 +29,7 @@ unsigned long long find_target_dll_base_address
 		return show_error_exit( "%s:%d Module Snapshot error for PID `%d`\n", __FILE__, __LINE__, target_pid )?0:0;
 	moduleEntry_.dwSize = sizeof( MODULEENTRY32 );
 	if( !Module32First( moduleSnapshotHandle_, &moduleEntry_ ) ) {
-		CloseHandle( moduleSnapshotHandle_ );    
+		CloseHandle( moduleSnapshotHandle_ );
 		show_error_exit("%s:%d Error in Module32First\n", __FILE__, __LINE__ );
 		return 0;
 	}
@@ -49,7 +49,7 @@ unsigned int find_parameter_offset( char * target_dll ){
 // load the DLL in our process space
 	HINSTANCE hDLL=LoadLibrary(target_dll); // not calling FreeLibrary afterwards because of weird error
 	if(NULL==hDLL)
-		show_error_exit( "%s:%d error in LoadLibrary\n", __FILE__, __LINE__ );
+		return show_error_exit( "%s:%d error in LoadLibrary `%s`\n", __FILE__, __LINE__, target_dll )?0:0;
 // LoadLibrary kindly gave us the DLL base address
 	uintptr_t our_dll_base_address = (uintptr_t)hDLL;
 // get the absolute address of the parameter
@@ -305,9 +305,7 @@ int main
 	}
 
 	GetLocalTime(&time);
-	file_log("%s:%d: system time is %d-%02d-%02d %02d:%02d:%02d\n"
-	,	__FILE__
-	,	__LINE__
+	file_log("System time is %d-%02d-%02d %02d:%02d:%02d\n"
 	,	time.wYear
 	,	time.wMonth
 	,	time.wDay
@@ -315,12 +313,11 @@ int main
 	,	time.wMinute
 	,	time.wSecond
 	);
-	printout("%s:%d: target pid:`%d`, dll:`%s`\n", __FILE__, __LINE__, pid, g_dll_file_name);
+	printout("Target pid:`%d`, dll:`%s`\n", pid, g_dll_file_name);
 
 	perform_dll_injection(pid, g_dll_file_name);
 
 	unsigned long parameter_offset=find_parameter_offset(g_dll_file_name);
-
 	if(0==parameter_offset)
 		return show_error_exit( "%s:%d error getting parameter offset\n", __FILE__, __LINE__ );
 

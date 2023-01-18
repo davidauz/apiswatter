@@ -5,11 +5,14 @@
 // code specific for WriteProcessMemory
 
 LPVOID g_wpm_address;
-LPVOID original_address=0;
+LPVOID original_wpm_function_address=0xBADCAFFE;
 char g_hooked_func_orig_bytes[50] = {0};
 
-CHAR *get_wpm_buffer_for_orig_bytes()
-{
+LPVOID get_wpm_pointer_to_original_address(){
+	return &original_wpm_function_address;
+}
+
+CHAR *get_wpm_buffer_for_orig_bytes() {
 	return g_hooked_func_orig_bytes;
 }
 
@@ -29,14 +32,11 @@ BOOL new_WriteProcessMemory
 ,	SIZE_T *lpNumberOfBytesWritten
 )
 {
-	file_log("%s:%d writing at `0x%.16llX` size is `%d`\n", __FILE__, __LINE__, lpBaseAddress, nSize);
+	file_log("WriteProcessMemory writing `%d` bytes at `0x%.16llX`:\n", nSize, lpBaseAddress);
 	file_dump_hex(lpBuffer, nSize);
 
-	if(0==original_address)
-		original_address=(LPVOID)GetProcAddress(GetModuleHandle("KERNELBASE"), "WriteProcessMemory");
-
 // restore the original function
-	RestoreHook(g_hooked_func_orig_bytes, original_address);
+	RestoreHook(g_hooked_func_orig_bytes, original_wpm_function_address);
 
 // call the original function
 	BOOL bRet = WriteProcessMemory(hProcess, lpBaseAddress, lpBuffer, nSize, lpNumberOfBytesWritten);
@@ -44,9 +44,9 @@ BOOL new_WriteProcessMemory
 // place the hook back again
 	hook_on
 	(	g_hooked_func_orig_bytes
-	,	original_address
+	,	original_wpm_function_address
 	,	new_WriteProcessMemory
-	,	original_address
+	,	get_wpm_pointer_to_original_address()
 	);
 }
 

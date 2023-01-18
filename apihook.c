@@ -12,14 +12,14 @@ BOOL WINAPI DllMain
 ,	LPVOID lpvReserved // reserved
 )
 {
-	set_log_fp("c:\\devel\\log2.txt");
-//	set_log_fp("");
+	set_log_fp("");
 	if( DLL_PROCESS_ATTACH == fdwReason ) {
-//		hook_on
-//		(	get_wpm_buffer_for_orig_bytes()
-//		,	(LPVOID)GetProcAddress(GetModuleHandle("KERNELBASE"), "WriteProcessMemory")
-//		,	new_WriteProcessMemory
-//		);
+		hook_on
+		(	get_wpm_buffer_for_orig_bytes()
+		,	(LPVOID)GetProcAddress(GetModuleHandle("KERNELBASE"), "WriteProcessMemory")
+		,	new_WriteProcessMemory
+		,	get_wpm_pointer_to_original_address()
+		);
 
 		hook_on
 		(	get_gpa_buffer_for_orig_bytes()
