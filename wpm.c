@@ -46,6 +46,7 @@ BOOL new_WriteProcessMemory
 	(	g_hooked_func_orig_bytes
 	,	original_address
 	,	new_WriteProcessMemory
+	,	original_address
 	);
 }
 

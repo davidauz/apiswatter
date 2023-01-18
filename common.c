@@ -111,19 +111,23 @@ void file_dump_hex(const void* data, size_t size) {
 
 void hook_on
 (	char *buffer_for_original_opcodes
-,	CHAR *orig_address
+,	LPVOID pointer_to_target_function
 ,	LPVOID lp_to_new_function
+,	unsigned long long * where_to_store_target_function_address
 ){
 	DWORD	oldProtect
 	;
 	CHAR new_opcodes[]  = "\x49\xbb\x88\x77\x66\x55\x44\x33\x22\x11" // 10 bytes
 	"\x41\xff\xe3" // 3 bytes
 	;
-file_log("%s:%d buffer`0x%.16llX`, address`0x%.16llX`\n", __FILE__, __LINE__, buffer_for_original_opcodes, orig_address);
+file_log("%s:%d\nwhere_to_store_target_function_address=`0x%.16llX`\npointer_to_target_function=`0x%.16llX`\nvalue=`0x%.16llX`\n", __FILE__, __LINE__, where_to_store_target_function_address, pointer_to_target_function, *where_to_store_target_function_address);
+//	memcpy(where_to_store_target_function_address, (unsigned long long)pointer_to_target_function, 4);
+	*where_to_store_target_function_address = (unsigned long long)pointer_to_target_function;
+file_log("%s:%d stored address`0x%.16llX`\n", __FILE__, __LINE__, *where_to_store_target_function_address );
 
 // save the original opcodes for later restore
 	if(0==*buffer_for_original_opcodes)
-		memcpy(buffer_for_original_opcodes, orig_address, 20);
+		memcpy(buffer_for_original_opcodes, pointer_to_target_function, 20);
 
 // the beginning of the function will be overwritten with this:
 // 49bb1122334455667788	mov r11,8877665544332211h
@@ -140,11 +144,11 @@ file_log("%s:%d buffer`0x%.16llX`, address`0x%.16llX`\n", __FILE__, __LINE__, bu
 		*p_where_to_write++=opcode;
 		address=address >> 8;
 	}
-	VirtualProtect(orig_address, NUM_BYTES, PAGE_EXECUTE_READWRITE, &oldProtect);
-	memcpy(orig_address, new_opcodes, NUM_BYTES);
-	VirtualProtect(orig_address, NUM_BYTES, oldProtect, &oldProtect);
-file_log("%s:%d hook_on SUCCESS\n", __FILE__, __LINE__);
-//from this moment on, every call to orig_address will be diverted to lp_to_new_function
+	VirtualProtect(pointer_to_target_function, NUM_BYTES, PAGE_EXECUTE_READWRITE, &oldProtect);
+	memcpy(pointer_to_target_function, new_opcodes, NUM_BYTES);
+	VirtualProtect(pointer_to_target_function, NUM_BYTES, oldProtect, &oldProtect);
+file_log("%s:%d hook_on SUCCESS\n\n\n", __FILE__, __LINE__);
+//from this moment on, every call to the target function will be diverted to the new one
 }
 
 

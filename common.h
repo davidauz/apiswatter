@@ -13,8 +13,9 @@ char *get_log_file_path();
 
 void hook_on
 (	CHAR *buffer_for_original_opcodes
-,	CHAR *orig_address
+,	LPVOID orig_address
 ,	LPVOID lp_to_new_function
+,	unsigned long long * where_to_store_target_function_address
 );
 
 BOOL RestoreHook
