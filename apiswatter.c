@@ -5,8 +5,14 @@
 #include "common.h"
 
 #define OPTION_DELETE_LOG_FILE 0x01
-#define OPTION_EXE_NAME 0x02
-#define OPTION_PID 0x04
+#define OPTION_START_EXE 0x02
+#define OPTION_RUNNING_PID 0x04
+#define OPTION_RUNNING_EXE 0x10
+#define OPTION_LOG_FILE 0x20
+
+#define CHECK_ARGUMENT \
+if(argc<=(1+idx)) \
+	return show_error_exit("Missing argument after option `%s`\n", argv[idx]);
 
 char g_dll_file_name[MAX_PATH]
 ;
@@ -168,13 +174,14 @@ int fix_parameter
 	,	&oldProtect
 	))
 		return show_error_exit( "%s:%d error in VirtualProtect\n", __FILE__, __LINE__);
-	b_res = WriteProcessMemory
+	if ( WriteProcessMemory
 	(	hProcess //  [in]  HANDLE  hProcess
 	,	target_address // [in]  LPVOID  lpBaseAddress
 	,	log_file_path // [in]  LPCVOID lpBuffer
 	,	file_path_length //[in]  SIZE_T  nSize
 	,	&NumberOfBytesWritten // [out] SIZE_T *lpNumberOfBytesWritten
-	);
+	))
+		file_log("%s:%d: Error in WriteProcessMemory`\n" ,__FILE__, __LINE__ );
 	if(NumberOfBytesWritten!=file_path_length)
 		file_log("%s:%d: `%d`!=`%d`\n" ,__FILE__, __LINE__ , NumberOfBytesWritten, file_path_length);
 	if(0==VirtualProtectEx
@@ -218,16 +225,41 @@ int find_process_id(char *TARGET_EXE) {
 int Usage(){
 	return show_error_exit("%s:%d\nUsage\n\n"
 "-h: this help\n"
-"-p <target pid>\n"
-"-e <target exe name>\n"
-"-d <dll file name> (default %s)\n"
-"-l <log file> (default %s)\n"
-"-r delete log file contents at startup\n"
+"-a <exe name>: name of running executable to attach to\n"
+"-p <pid>: PID of running executable to attach to\n"
+"-e <target exe path>: executable file to run\n"
+"-d <dll file name>: DLL file to inject (default %s)\n"
+"-f <log file>: log file name (default c:\\log.txt)\n"
+"-r: delete log file contents at startup\n"
 ,	__FILE__
 ,	__LINE__
 ,	g_dll_file_name
 ,	get_log_file_path()
 );
+}
+
+int start_exe_in_suspended_mode
+(	char *exe_path
+,	PROCESS_INFORMATION *p_process_information
+){
+	STARTUPINFO	startupinfo = {0}
+	;
+
+	startupinfo.cb = sizeof(STARTUPINFO);
+	if (!CreateProcess
+	(	NULL
+	,	exe_path
+	,	NULL
+	,	NULL
+	,	FALSE
+	,	CREATE_SUSPENDED
+	,	NULL
+	,	NULL
+	,	&startupinfo
+	,	p_process_information)
+	)
+		return show_error_exit("CreateProcess for `%s` failed", exe_path);
+	return 0;
 }
 
 int main
@@ -236,72 +268,87 @@ int main
 )
 {
 	int	pid
-	,	i=1
+	,	idx=1
 	,	CL_OPTIONS=0
 	;
 	SYSTEMTIME time
 	;
-	char exe_name[MAX_PATH]
+	char *running_process_exe_name
+	;
+	PROCESS_INFORMATION	process_information = {0}
 	;
 
-	set_log_fp("log.txt"); // default log file name
 	strcpy(g_dll_file_name, "apihook.dll");
 
 	if(2>argc)
 		return Usage();
 
-	while (i < argc ) {
-		if(!strcmp("-h", argv[i]))
+	while (idx < argc ) {
+		if(!strcmp("-h", argv[idx]))
 			return Usage();			
-	else if(!strcmp("-d", argv[i])){
-		if(argc<=(1+i))
-			return show_error_exit("%s:%d Missing argument after option `%s`\n", __FILE__, __LINE__, argv[i]);
-		i++;
-		if(MAX_PATH < strlen(argv[i]))
-			return show_error_exit("%s:%d DLL file name max length=`%d`\n", __FILE__, __LINE__, MAX_PATH);
-		strcpy(g_dll_file_name, argv[i]);
-		i++;
-	} else if(!strcmp("-e", argv[i])){
-		CL_OPTIONS |= OPTION_EXE_NAME;
-		if(argc<=(1+i))
-			return show_error_exit("%s:%d Missing argument after option `%s`", __FILE__, __LINE__, argv[i]);
-		i++;
-		strcpy(exe_name, argv[i]);
-		i++;
-	} else if(!strcmp("-r", argv[i])){
-		CL_OPTIONS |= OPTION_DELETE_LOG_FILE;
-		i++;
-	} else if(!strcmp("-l", argv[i])){
-		if(argc<=(1+i))
-			return show_error_exit("%s:%d Missing argument after option `%s`", __FILE__, __LINE__, argv[i]);
-		i++;
-		if(37<strlen(argv[i]))
-			return show_error_exit("%s:%d log file max path length is 37 bytes\n", __FILE__, __LINE__);
-		set_log_fp(argv[i]);
-		i++;
-	} else if(!strcmp("-p", argv[i])){
-		CL_OPTIONS |= OPTION_PID;
-		if(argc<=(1+i))
-			return show_error_exit("%s:%d Missing argument after option `%s`\n", __FILE__, __LINE__, argv[i]);
-		i++;
-		sscanf(argv[i], "%i", &pid);
-		i++;
-	} else
-		return show_error_exit("%s:%d unknown option `%s`\n", __FILE__, __LINE__, argv[i]);
-
+		else if(!strcmp("-a", argv[idx])){
+			CHECK_ARGUMENT
+			CL_OPTIONS |= OPTION_RUNNING_EXE;
+			running_process_exe_name=argv[++idx];
+			idx++;
+		} else if(!strcmp("-p", argv[idx])){
+			CHECK_ARGUMENT
+			CL_OPTIONS |= OPTION_RUNNING_PID;
+			sscanf(argv[++idx], "%i", &pid);
+			idx++;
+		} else if(!strcmp("-e", argv[idx])){
+			CHECK_ARGUMENT
+			CL_OPTIONS |= OPTION_START_EXE;
+			if(MAX_PATH < strlen(argv[++idx]))
+				return show_error_exit("Executable path max length=`%d`\n", MAX_PATH);
+			running_process_exe_name= argv[idx++];
+		} else if(!strcmp("-d", argv[idx])){
+			CHECK_ARGUMENT
+			if(100 < strlen(argv[++idx]))
+				return show_error_exit("DLL file name max length=`100`\n");
+			strcpy(g_dll_file_name, argv[idx++]);
+		} else if(!strcmp("-f", argv[idx])){
+			CHECK_ARGUMENT
+			CL_OPTIONS |= OPTION_LOG_FILE;
+			if(MAX_PATH<strlen(argv[++idx]))
+				return show_error_exit("Log file max path length is 37 bytes\n");
+			set_log_fp(argv[idx++]);
+		} else if(!strcmp("-r", argv[idx])){
+			CL_OPTIONS |= OPTION_DELETE_LOG_FILE;
+			idx++;
+		} else
+			return show_error_exit("%s:%d unknown option `%s`\n", __FILE__, __LINE__, argv[idx]);
 	}
 
-	if(CL_OPTIONS & OPTION_DELETE_LOG_FILE)
-		delete_log_file();
-	if(	CL_OPTIONS & OPTION_EXE_NAME
-	&&	CL_OPTIONS & OPTION_PID
+	if(	CL_OPTIONS & OPTION_LOG_FILE
+	&&	CL_OPTIONS & OPTION_START_EXE
 	)
-		return show_error_exit("%s:%d cannot give both PID and EXE NAME\n", __FILE__, __LINE__);
+		return show_error_exit("Conflicting options `-e` and `-f` (sorry)\n");
 
-	if(CL_OPTIONS & OPTION_EXE_NAME) {
-		pid=find_process_id(exe_name);
+	if(	CL_OPTIONS & OPTION_RUNNING_PID
+	&&	CL_OPTIONS & OPTION_START_EXE
+	)
+		return show_error_exit("Conflicting options `-p` and `-e`\n");
+
+	if(	CL_OPTIONS & OPTION_RUNNING_EXE
+	&&	CL_OPTIONS & OPTION_START_EXE
+	)
+		return show_error_exit("Conflicting options `-a` and `-e`\n");
+
+	if(	CL_OPTIONS & OPTION_RUNNING_EXE
+	&&	CL_OPTIONS & OPTION_RUNNING_PID
+	)
+		return show_error_exit("Conflicting options `-a` and `-p`\n");
+
+	if(	CL_OPTIONS & OPTION_DELETE_LOG_FILE
+	)
+		delete_log_file();
+
+	if(	CL_OPTIONS & OPTION_RUNNING_EXE
+	) {
+		pid=find_process_id(running_process_exe_name);
 		if(0==pid)
-			return show_error_exit("%s:%d problem getting pid for `%s`\n", __FILE__, __LINE__, exe_name);
+			return show_error_exit("Problem getting pid for `%s`\n", running_process_exe_name);
 	}
 
 	GetLocalTime(&time);
@@ -313,22 +360,36 @@ int main
 	,	time.wMinute
 	,	time.wSecond
 	);
-	printout("Target pid:`%d`, dll:`%s`\n", pid, g_dll_file_name);
+
+	if( CL_OPTIONS & OPTION_START_EXE) {
+		if(0!=start_exe_in_suspended_mode(running_process_exe_name, &process_information))
+			return show_error_exit( "Error in start_exe_in_suspended_mode\n" );
+		pid=process_information.dwProcessId;
+	}
 
 	perform_dll_injection(pid, g_dll_file_name);
 
-	unsigned long parameter_offset=find_parameter_offset(g_dll_file_name);
-	if(0==parameter_offset)
-		return show_error_exit( "%s:%d error getting parameter offset\n", __FILE__, __LINE__ );
-
-	unsigned long long target_dll_base_address= find_target_dll_base_address(pid, g_dll_file_name);
-
-	if(0==target_dll_base_address)
-		return show_error_exit( "%s:%d error getting target DLL base addr\n", __FILE__, __LINE__ );
-
+	if( CL_OPTIONS & OPTION_LOG_FILE ) {
 // now for the old problem of passing a parameter to an injected DLL
-	if(0 != fix_parameter(pid, (BYTE *)(target_dll_base_address+parameter_offset), get_log_file_path()))
-		return show_error_exit( "%s:%d error in fix_parameter\n", __FILE__, __LINE__ );
+		unsigned long parameter_offset=find_parameter_offset(g_dll_file_name);
+		if(0==parameter_offset)
+			return show_error_exit( "%s:%d error getting parameter offset\n", __FILE__, __LINE__ );
+
+		unsigned long long target_dll_base_address= find_target_dll_base_address(pid, g_dll_file_name);
+
+		if(0==target_dll_base_address)
+			return show_error_exit( "%s:%d error getting target DLL base addr\n", __FILE__, __LINE__ );
+
+		if(0 != fix_parameter(pid, (BYTE *)(target_dll_base_address+parameter_offset), get_log_file_path()))
+			return show_error_exit( "%s:%d error in fix_parameter\n", __FILE__, __LINE__ );
+	}
+
+	if(0!=process_information.dwProcessId) {
+		if (ResumeThread(process_information.hThread) == -1)
+			return show_error_exit("ResumeThread failed\n");
+		CloseHandle(process_information.hProcess);
+	}
+
 	printout("%s:%d Success\n\n", __FILE__, __LINE__);
 
 	return 0;

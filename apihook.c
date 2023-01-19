@@ -13,7 +13,7 @@ BOOL WINAPI DllMain
 ,	LPVOID lpvReserved // reserved
 )
 {
-	set_log_fp("");
+	set_log_fp("c:\\log.txt");
 	if( DLL_PROCESS_ATTACH == fdwReason ) {
 		hook_on
 		(	get_wpm_buffer_for_orig_bytes()
@@ -23,18 +23,19 @@ BOOL WINAPI DllMain
 		);
 
 		hook_on
+		(	get_gmh_buffer_for_orig_bytes()
+		,	(LPVOID)GetProcAddress(GetModuleHandle("KERNELBASE"), "GetModuleHandleA")
+		,	new_GetModuleHandle
+		,	get_gmh_pointer_to_original_address()
+		);
+
+		hook_on
 		(	get_gpa_buffer_for_orig_bytes()
 		,	(LPVOID)GetProcAddress(GetModuleHandle("KERNELBASE"), "GetProcAddressForCaller")
 		,	new_GetProcAddress
 		,	get_gpa_pointer_to_original_address()
 		);
 
-		hook_on
-		(	get_gmh_buffer_for_orig_bytes()
-		,	(LPVOID)GetProcAddress(GetModuleHandle("KERNELBASE"), "GetModuleHandleA")
-		,	new_GetModuleHandle
-		,	get_gmh_pointer_to_original_address()
-		);
 	}
 	return TRUE;  // Successful DLL_PROCESS_ATTACH
 }

@@ -46,9 +46,9 @@ void set_log_fp(char *fp){
 
 int delete_log_file() {
 	if( ! PathFileExistsA (g_log_file_path)) 
-		return show_error_exit( "%s:%d warning: file `%s` not found\n", __FILE__, __LINE__, g_log_file_path);
+		return 0;
 	else if(0==DeleteFileA(g_log_file_path))
-		return show_error_exit( "%s:%d Cannot delete file `%s`\n", __FILE__, __LINE__, g_log_file_path);
+		return show_error_exit( "Cannot delete file `%s`\n", g_log_file_path);
 	return 0;
 }
 
