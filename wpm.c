@@ -5,7 +5,7 @@
 // code specific for WriteProcessMemory
 
 LPVOID g_wpm_address;
-LPVOID original_wpm_function_address=0xBADCAFFE;
+LPVOID original_wpm_function_address=(LPVOID)0xBADCAFFE;
 char g_hooked_func_orig_bytes[50] = {0};
 
 LPVOID get_wpm_pointer_to_original_address(){

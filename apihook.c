@@ -3,6 +3,7 @@
 #include "common.h"
 #include "wpm.h"
 #include "gpa.h"
+#include "gmh.h"
 
 #define NUM_BYTES 13
 
@@ -26,6 +27,13 @@ BOOL WINAPI DllMain
 		,	(LPVOID)GetProcAddress(GetModuleHandle("KERNELBASE"), "GetProcAddressForCaller")
 		,	new_GetProcAddress
 		,	get_gpa_pointer_to_original_address()
+		);
+
+		hook_on
+		(	get_gmh_buffer_for_orig_bytes()
+		,	(LPVOID)GetProcAddress(GetModuleHandle("KERNELBASE"), "GetModuleHandleA")
+		,	new_GetModuleHandle
+		,	get_gmh_pointer_to_original_address()
 		);
 	}
 	return TRUE;  // Successful DLL_PROCESS_ATTACH

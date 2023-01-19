@@ -5,7 +5,7 @@
 // code specific for GetProcAddress
 
 LPVOID g_gpa_address;
-LPVOID gpa_original_address=0xBADCAFFE;
+LPVOID gpa_original_address=(LPVOID)0xBADCAFFE;
 char g_gpa_hooked_func_orig_bytes[50] = {0};
 
 LPVOID get_gpa_pointer_to_original_address(){
