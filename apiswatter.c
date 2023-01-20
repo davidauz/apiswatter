@@ -160,28 +160,29 @@ int fix_parameter
 	;
 	SIZE_T	NumberOfBytesWritten
 	;
-
+	target_address=(BYTE *)0x00007FF8AE82D020;
 	HANDLE hProcess = OpenProcess
 	(	PROCESS_ALL_ACCESS
 	,	FALSE
 	,	target_pid
 	);
-	if(0==VirtualProtectEx
+	if(0==VirtualProtectEx // If the function fails, the return value is zero
 	(	hProcess
 	,	target_address
 	,	file_path_length
-	,	PAGE_EXECUTE_READWRITE
+	,	PAGE_READWRITE
 	,	&oldProtect
 	))
 		return show_error_exit( "%s:%d error in VirtualProtect\n", __FILE__, __LINE__);
-	if ( WriteProcessMemory
+
+	if ( 0==WriteProcessMemory // carve parameter into DLL live flesh
 	(	hProcess //  [in]  HANDLE  hProcess
 	,	target_address // [in]  LPVOID  lpBaseAddress
 	,	log_file_path // [in]  LPCVOID lpBuffer
 	,	file_path_length //[in]  SIZE_T  nSize
 	,	&NumberOfBytesWritten // [out] SIZE_T *lpNumberOfBytesWritten
 	))
-		file_log("%s:%d: Error in WriteProcessMemory`\n" ,__FILE__, __LINE__ );
+		return show_error_exit("%s:%d: Error in WriteProcessMemory\n" ,__FILE__, __LINE__ );
 	if(NumberOfBytesWritten!=file_path_length)
 		file_log("%s:%d: `%d`!=`%d`\n" ,__FILE__, __LINE__ , NumberOfBytesWritten, file_path_length);
 	if(0==VirtualProtectEx
@@ -234,7 +235,6 @@ int Usage(){
 ,	__FILE__
 ,	__LINE__
 ,	g_dll_file_name
-,	get_log_file_path()
 );
 }
 
@@ -273,7 +273,8 @@ int main
 	;
 	SYSTEMTIME time
 	;
-	char *running_process_exe_name
+	char	*process_name_or_path
+	,	*log_file_path=NULL
 	;
 	PROCESS_INFORMATION	process_information = {0}
 	;
@@ -289,7 +290,7 @@ int main
 		else if(!strcmp("-a", argv[idx])){
 			CHECK_ARGUMENT
 			CL_OPTIONS |= OPTION_RUNNING_EXE;
-			running_process_exe_name=argv[++idx];
+			process_name_or_path=argv[++idx];
 			idx++;
 		} else if(!strcmp("-p", argv[idx])){
 			CHECK_ARGUMENT
@@ -301,7 +302,7 @@ int main
 			CL_OPTIONS |= OPTION_START_EXE;
 			if(MAX_PATH < strlen(argv[++idx]))
 				return show_error_exit("Executable path max length=`%d`\n", MAX_PATH);
-			running_process_exe_name= argv[idx++];
+			process_name_or_path= argv[idx++];
 		} else if(!strcmp("-d", argv[idx])){
 			CHECK_ARGUMENT
 			if(100 < strlen(argv[++idx]))
@@ -312,7 +313,7 @@ int main
 			CL_OPTIONS |= OPTION_LOG_FILE;
 			if(MAX_PATH<strlen(argv[++idx]))
 				return show_error_exit("Log file max path length is 37 bytes\n");
-			set_log_fp(argv[idx++]);
+			log_file_path=argv[idx++];
 		} else if(!strcmp("-r", argv[idx])){
 			CL_OPTIONS |= OPTION_DELETE_LOG_FILE;
 			idx++;
@@ -339,16 +340,22 @@ int main
 	&&	CL_OPTIONS & OPTION_RUNNING_PID
 	)
 		return show_error_exit("Conflicting options `-a` and `-p`\n");
+		
+	if(	NULL==log_file_path)
+		log_file_path= "c:\\log.txt";
 
 	if(	CL_OPTIONS & OPTION_DELETE_LOG_FILE
 	)
-		delete_log_file();
+		if(0==DeleteFileA(log_file_path))
+			show_error_exit( "Cannot delete file `%s`\n", log_file_path);
 
 	if(	CL_OPTIONS & OPTION_RUNNING_EXE
 	) {
-		pid=find_process_id(running_process_exe_name);
+		pid=find_process_id(process_name_or_path);
 		if(0==pid)
-			return show_error_exit("Problem getting pid for `%s`\n", running_process_exe_name);
+			return show_error_exit("Problem getting pid for `%s`\n", process_name_or_path);
+		else
+			printf("pid for `%s` is `%d`\n", process_name_or_path, pid);
 	}
 
 	GetLocalTime(&time);
@@ -362,7 +369,7 @@ int main
 	);
 
 	if( CL_OPTIONS & OPTION_START_EXE) {
-		if(0!=start_exe_in_suspended_mode(running_process_exe_name, &process_information))
+		if(0!=start_exe_in_suspended_mode(process_name_or_path, &process_information))
 			return show_error_exit( "Error in start_exe_in_suspended_mode\n" );
 		pid=process_information.dwProcessId;
 	}
@@ -380,7 +387,7 @@ int main
 		if(0==target_dll_base_address)
 			return show_error_exit( "%s:%d error getting target DLL base addr\n", __FILE__, __LINE__ );
 
-		if(0 != fix_parameter(pid, (BYTE *)(target_dll_base_address+parameter_offset), get_log_file_path()))
+		if(0 != fix_parameter(pid, (BYTE *)target_dll_base_address+parameter_offset, log_file_path))
 			return show_error_exit( "%s:%d error in fix_parameter\n", __FILE__, __LINE__ );
 	}
 

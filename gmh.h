@@ -1,11 +1,6 @@
 #ifndef _GMH_H_
 #define _GMH_H_
 
-//typedef FARPROC (WINAPI *GetProcAddress_)
-//(	HMODULE hModule
-//,	LPCSTR  lpProcName
-//);
-
 FARPROC new_GetModuleHandle
 (	LPCSTR lpModuleName
 );

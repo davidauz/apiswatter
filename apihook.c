@@ -1,9 +1,10 @@
 #include <windows.h>
 #include <stdbool.h>
 #include "common.h"
-#include "wpm.h"
-#include "gpa.h"
-#include "gmh.h"
+#include "wpm.h" // WriteProcessMemory
+#include "gpa.h" // GetProcAddress
+#include "gmh.h" // GetModuleHandle
+#include "crt.h" // CreateRemoteThread
 
 #define NUM_BYTES 13
 
@@ -34,6 +35,13 @@ BOOL WINAPI DllMain
 		,	(LPVOID)GetProcAddress(GetModuleHandle("KERNELBASE"), "GetProcAddressForCaller")
 		,	new_GetProcAddress
 		,	get_gpa_pointer_to_original_address()
+		);
+
+		hook_on
+		(	get_crt_buffer_for_orig_bytes()
+		,	(LPVOID)GetProcAddress(GetModuleHandle("KERNELBASE"), "CreateRemoteThread")
+		,	new_GetProcAddress
+		,	get_crt_pointer_to_original_address()
 		);
 
 	}
