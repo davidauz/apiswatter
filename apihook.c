@@ -5,6 +5,8 @@
 #include "gpa.h" // GetProcAddress
 #include "gmh.h" // GetModuleHandle
 #include "crt.h" // CreateRemoteThread
+#include "vfr.h" // VirtualFree
+#include "vpr.h" // VirtualProtect
 
 #define NUM_BYTES 13
 
@@ -39,10 +41,19 @@ BOOL WINAPI DllMain
 
 		hook_on
 		(	get_crt_buffer_for_orig_bytes()
-		,	(LPVOID)GetProcAddress(GetModuleHandle("KERNELBASE"), "CreateRemoteThread")
-		,	new_GetProcAddress
+		,	(LPVOID)GetProcAddress(GetModuleHandle("KERNELBASE"), "CreateRemoteThreadEx")
+		,	new_CreateRemoteThread
 		,	get_crt_pointer_to_original_address()
 		);
+
+		special_hook_on_virtualprotect();
+
+//		hook_on
+//		(	get_vfr_buffer_for_orig_bytes()
+//		,	(LPVOID)GetProcAddress(GetModuleHandle("KERNELBASE"), "VirtualFree")
+//		,	new_VirtualFree
+//		,	get_vfr_pointer_to_original_address()
+//		);
 
 	}
 	return TRUE;  // Successful DLL_PROCESS_ATTACH

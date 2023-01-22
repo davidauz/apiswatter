@@ -31,6 +31,7 @@ HANDLE new_CreateRemoteThread
 ,	LPTHREAD_START_ROUTINE lpStartAddress
 ,	LPVOID                 lpParameter
 ,	DWORD                  dwCreationFlags
+,	LPPROC_THREAD_ATTRIBUTE_LIST lpAttributeList
 ,	LPDWORD                lpThreadId
 )
 {
@@ -38,19 +39,20 @@ HANDLE new_CreateRemoteThread
 	RestoreHook(g_crt_hooked_func_orig_bytes, crt_original_address);
 
 // call the original function
-	HANDLE return_value = CreateRemoteThread
+	HANDLE return_value = CreateRemoteThreadEx
 (	hProcess
 ,	lpThreadAttributes
 ,	dwStackSize
 ,	lpStartAddress
 ,	lpParameter
 ,	dwCreationFlags
+,	lpAttributeList
 ,	lpThreadId
 );
 	if(0==return_value)
-		file_log("CreateRemoteThread failed\n" );
+		file_log("CreateRemoteThread HANDLE=`0x%.16llX`, pid=`%d`, start address=`0x%.16llX` failed\n", hProcess, lpThreadId, lpStartAddress );
 	else
-		file_log("CreateRemoteThread HANDLE=`0x%.16llX`, start address=`0x%.16llX`\n", hProcess, lpStartAddress);
+		file_log("CreateRemoteThread HANDLE=`0x%.16llX`, pid=`%d`, start address=`0x%.16llX` success\n", hProcess, lpThreadId, lpStartAddress);
 
 // place the hook back again
 	hook_on

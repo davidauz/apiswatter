@@ -232,6 +232,15 @@ int Usage(){
 "-d <dll file name>: DLL file to inject (default %s)\n"
 "-f <log file>: log file name (default c:\\log.txt)\n"
 "-r: delete log file contents at startup\n"
+"\n"
+"Logs the following functions:\n"
+"\n"
+"- WriteProcessMemory\n"
+"- GetModuleHandle\n"
+"- GetProcAddress\n"
+"- CreateRemoteThread\n"
+"- VirtualProtect\n"
+"\n"
 ,	__FILE__
 ,	__LINE__
 ,	g_dll_file_name

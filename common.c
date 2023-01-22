@@ -108,8 +108,8 @@ void hook_on
 ){
 	DWORD	oldProtect
 	;
-	CHAR new_opcodes[]  = "\x49\xbb\x88\x77\x66\x55\x44\x33\x22\x11" // 10 bytes
-	"\x41\xff\xe3" // 3 bytes
+	CHAR new_opcodes[]  = "\x49\xbb\x88\x77\x66\x55\x44\x33\x22\x11" // movabs $0x1122334455667788,%r11 (10 bytes)
+	"\x41\xff\xe3" // jmp    *%r11 (3 bytes)
 	;
 	*where_to_store_target_function_address = (unsigned long long)pointer_to_target_function;
 
