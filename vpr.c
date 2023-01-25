@@ -1,10 +1,11 @@
 #include <windows.h>
 #include <stdbool.h>
 #include "common.h"
+#include "dll_common.h"
 #include "vpr.h"
 
 // specifics for VirtualProtect
-//BOOL CAN_SAFELY_TRIGGER_HOOK;
+int g_perform_trace=0;
 LPVOID g_vpr_address;
 LPVOID vpr_original_address=(LPVOID)0xBADC0DE;
 char g_vpr_hooked_func_orig_bytes[50] = {0};
@@ -44,7 +45,7 @@ void special_hook_on_virtualprotect()
 	CHAR new_opcodes[]  = "\x49\xbb\x88\x77\x66\x55\x44\x33\x22\x11" // 10 bytes
 	"\x41\xff\xe3" // 3 bytes
 	;
-	if( 0xBADCODE == vpr_original_address)
+	if( (LPVOID)0xBADC0DE == vpr_original_address)
 		vpr_original_address= (LPVOID)GetProcAddress(GetModuleHandle("KERNELBASE"), "VirtualProtect");
 
 // save the original opcodes for later restore
@@ -82,19 +83,25 @@ BOOL new_VirtualProtect
 ,	PDWORD lpflOldProtect
 )
 {
-	file_log("VirtualProtect `%d` bytes at `0x%.16llX`:\n", dwSize, lpAddress );
+	if(1==g_perform_trace)
+		file_log("VirtualProtect `%d` bytes at `0x%.16llX`:\n", dwSize, lpAddress );
 	special_RestoreHook(g_vpr_hooked_func_orig_bytes, vpr_original_address);
 
 // call the original function
 	BOOL return_value = VirtualProtect
-(	lpAddress
-,	dwSize
-,	flNewProtect
-,	lpflOldProtect
-);
-	file_log("VirtualProtect returns `%d`, content is:\n", return_value );
-	file_dump_hex(lpAddress, dwSize);
+	(	lpAddress
+	,	dwSize
+	,	flNewProtect
+	,	lpflOldProtect
+	);
+	if(1==g_perform_trace) {
+		file_log("VirtualProtect returns `%d`, content is:\n", return_value );
+		file_dump_hex(lpAddress, dwSize);
+	}
 	special_hook_on_virtualprotect();
 	return return_value;
 }
 
+void set_vpr_trace_on_off(int i){
+	g_perform_trace=i;
+}

@@ -2,7 +2,6 @@
 #define _COMMON_H_
 
 #define ERROR_VALUE	255
-#define NUM_BYTES 13 // to divert flow need 13 bytes
 
 int file_log(char* format, ...);
 void set_log_fp(char *);

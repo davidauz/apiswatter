@@ -47,6 +47,7 @@ BOOL WINAPI DllMain
 		);
 
 		special_hook_on_virtualprotect();
+		set_vpr_trace_on_off(1);
 
 //		hook_on
 //		(	get_vfr_buffer_for_orig_bytes()
