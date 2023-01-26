@@ -53,9 +53,11 @@ void hook_on
 		*p_where_to_write++=opcode;
 		address=address >> 8;
 	}
+	set_vpr_trace_on_off(0);
 	VirtualProtect(pointer_to_target_function, NUM_BYTES, PAGE_EXECUTE_READWRITE, &oldProtect);
 	memcpy(pointer_to_target_function, new_opcodes, NUM_BYTES);
 	VirtualProtect(pointer_to_target_function, NUM_BYTES, oldProtect, &oldProtect);
+	set_vpr_trace_on_off(1);
 //from this moment on, every call to the target function will be diverted to the new one
 }
 
