@@ -54,4 +54,6 @@ At present logs calls to the following functions:
 * GetProcAddress
 * CreateRemoteThread
 * WriteProcessMemory
+* VirtualFree
+* VirtualProtect
 
